@@ -1150,31 +1150,54 @@ async function checkSession() {
 
 async function loadFromSupabase() {
   if(!currentUser?.id) return;
-  const uid=currentUser.id;
+  const uid = currentUser.id;
+  console.log('Loading from Supabase for user:', currentUser.email);
   try {
-    const [g,f,c]=await Promise.all([
-      supa.from('gastos').select('*').eq('user_id',uid),
-      supa.from('fijos').select('*').eq('user_id',uid),
-      supa.from('cuotas').select('*').eq('user_id',uid)
-    ]);
-    if(g.data?.length) S.gastos=g.data.map(r=>({id:r.id,desc:r.descripcion,monto:r.monto,cat:r.cat,pago:r.pago,fecha:r.fecha}));
-    if(f.data?.length) S.fijos=f.data.map(r=>({id:r.id,desc:r.descripcion,monto:r.monto,cat:r.cat,pago:r.pago}));
-    if(c.data?.length) S.cuotas=c.data.map(r=>({id:r.id,desc:r.descripcion,montoTotal:r.monto_total,montoCuota:r.monto_cuota,ncuotas:r.ncuotas,pago:r.pago,mesInicio:r.mes_inicio}));
-    refreshSelects(); render();
-  }catch(e){console.error(e);}
+    const { data, error } = await supa.from('user_data').select('data').eq('user_id', uid).single();
+    if (error) {
+      console.error('Supabase load error:', error);
+      return;
+    }
+    if (data?.data) {
+      const parsed = JSON.parse(data.data);
+      S.gastos = parsed.gastos || [];
+      S.fijos = parsed.fijos || [];
+      S.cuotas = parsed.cuotas || [];
+      if (parsed.cats) {
+        ['daily','cuotas','fijos'].forEach(t => {
+          if (parsed.cats[t]?.length) S.cats[t] = parsed.cats[t];
+        });
+      }
+      console.log('Loaded from Supabase OK - gastos:', S.gastos.length);
+      refreshSelects(); render();
+    }
+  } catch(e) {
+    console.error('loadFromSupabase exception:', e);
+  }
 }
 
 async function saveToSupabase() {
   if(!currentUser?.id) return;
-  const uid=currentUser.id;
+  const uid = currentUser.id;
+  const email = currentUser.email;
+  console.log('Saving to Supabase for user:', email, uid);
   try {
-    await supa.from('gastos').delete().eq('user_id',uid);
-    if(S.gastos.length) await supa.from('gastos').insert(S.gastos.map(g=>({id:g.id,user_id:uid,descripcion:g.desc,monto:g.monto,cat:g.cat,pago:g.pago,fecha:g.fecha})));
-    await supa.from('fijos').delete().eq('user_id',uid);
-    if(S.fijos.length) await supa.from('fijos').insert(S.fijos.map(f=>({id:f.id,user_id:uid,descripcion:f.desc,monto:f.monto,cat:f.cat,pago:f.pago})));
-    await supa.from('cuotas').delete().eq('user_id',uid);
-    if(S.cuotas.length) await supa.from('cuotas').insert(S.cuotas.map(c=>({id:c.id,user_id:uid,descripcion:c.desc,monto_total:c.montoTotal,monto_cuota:c.montoCuota,ncuotas:c.ncuotas,pago:c.pago,mes_inicio:c.mesInicio})));
-  }catch(e){console.error(e);}
+    // Save all data as one JSON blob in a single row — simpler and more reliable
+    const payload = {
+      user_id: uid,
+      email: email,
+      data: JSON.stringify(S),
+      updated_at: new Date().toISOString()
+    };
+    const { error } = await supa.from('user_data').upsert(payload, { onConflict: 'user_id' });
+    if (error) {
+      console.error('Supabase save error:', error);
+    } else {
+      console.log('Saved to Supabase OK');
+    }
+  } catch(e) {
+    console.error('saveToSupabase exception:', e);
+  }
 }
 
 // goScreen actualizado para perfil
