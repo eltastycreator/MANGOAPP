@@ -547,7 +547,15 @@ function shake(id){const el=document.getElementById(id);el.style.border='2px sol
 function getCatColor(type,name){return(S.cats[type]?.find(c=>c.name===name)||{color:'#636366'}).color;}
 
 function load(){
-  try{const r=localStorage.getItem(SK);if(r)S=JSON.parse(r);}catch(e){}
+  try{
+    // Restore user session first
+    const savedUser = localStorage.getItem('mango_user');
+    if(savedUser) currentUser = JSON.parse(savedUser);
+    // Load user-specific data if available, else generic
+    const dataKey = currentUser ? 'mango_data_'+currentUser.id : SK;
+    const r = localStorage.getItem(dataKey) || localStorage.getItem(SK);
+    if(r){ const p=JSON.parse(r); S.gastos=p.gastos||[]; S.fijos=p.fijos||[]; S.cuotas=p.cuotas||[]; if(p.cats)S.cats=p.cats; }
+  }catch(e){}
   ['daily','cuotas','fijos'].forEach(t=>{
     if(!S.cats)S.cats={};
     if(!S.cats[t]||!S.cats[t].length)S.cats[t]=DEF_CATS[t].map(c=>({...c}));
@@ -556,7 +564,13 @@ function load(){
   render();
   document.getElementById('mes-btn-label').textContent=mesLbl(selMes);
 }
-function save(){try{localStorage.setItem(SK,JSON.stringify(S));}catch(e){}}
+function save(){
+  try{
+    localStorage.setItem(SK, JSON.stringify(S));
+    if(currentUser?.id) localStorage.setItem('mango_data_'+currentUser.id, JSON.stringify(S));
+  }catch(e){}
+  saveToSupabase();
+}
 
 function refreshSelects(){
   [['d','daily'],['f','fijos']].forEach(([px,type])=>{
@@ -1079,7 +1093,11 @@ function setCurrentUser(user) {
     avatar: meta.avatar_url || null,
     provider: 'Mango'
   };
-  try { localStorage.setItem('mango_user', JSON.stringify(currentUser)); } catch(e) {}
+  // Always persist session to localStorage
+  try {
+    localStorage.setItem('mango_user', JSON.stringify(currentUser));
+    localStorage.setItem('mango_session_time', Date.now().toString());
+  } catch(e) {}
 }
 
 function onLogin() {
@@ -1137,14 +1155,58 @@ async function confirmDelete() {
 }
 
 async function checkSession() {
+  // First: if load() already restored currentUser, show the app immediately
+  if(currentUser) {
+    onLogin();
+  }
+  // Also restore from localStorage as backup
+  try {
+    const savedUser = localStorage.getItem('mango_user');
+    if(savedUser && !currentUser) {
+      currentUser = JSON.parse(savedUser);
+      onLogin();
+      // Load local data for this user
+      const localData = localStorage.getItem('mango_data_'+currentUser.id);
+      if(localData) {
+        const parsed = JSON.parse(localData);
+        S.gastos = parsed.gastos || S.gastos;
+        S.fijos = parsed.fijos || S.fijos;
+        S.cuotas = parsed.cuotas || S.cuotas;
+        if(parsed.cats) {
+          ['daily','cuotas','fijos'].forEach(t=>{
+            if(parsed.cats[t]?.length) S.cats[t]=parsed.cats[t];
+          });
+        }
+        refreshSelects(); render();
+      }
+    }
+  } catch(e) { console.error('localStorage restore error:', e); }
+
+  // Then: verify/refresh with Supabase in background
   supa.auth.onAuthStateChange((event,session)=>{
-    if(event==='SIGNED_IN'&&session&&!currentUser){setCurrentUser(session.user);onLogin();loadFromSupabase();}
-    else if(event==='SIGNED_OUT'){currentUser=null;}
+    if(event==='SIGNED_IN'&&session){
+      setCurrentUser(session.user);
+      if(!document.getElementById('login-screen').classList.contains('hidden')) {
+        onLogin();
+      }
+      loadFromSupabase();
+    } else if(event==='SIGNED_OUT'){
+      currentUser=null;
+    }
   });
+
   try {
     const {data}=await supa.auth.getSession();
-    if(data?.session?.user){setCurrentUser(data.session.user);onLogin();return true;}
-  }catch(e){}
+    if(data?.session?.user){
+      setCurrentUser(data.session.user);
+      if(!document.getElementById('login-screen').classList.contains('hidden')) {
+        onLogin();
+      }
+      loadFromSupabase();
+      return true;
+    }
+  }catch(e){ console.error('Supabase session error:', e); }
+
   return false;
 }
 
