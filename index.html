@@ -1005,7 +1005,7 @@ async function doRegister() {
   try {
     signUpResult = await supa.auth.signUp({
       email, password: pass,
-      options: { data: {nombre, apellido, full_name: nombre+' '+apellido}, emailRedirectTo: window.location.href }
+      options: { data: {nombre, apellido, full_name: nombre+' '+apellido}, emailRedirectTo: "https://mangoapp.vercel.app" }
     });
   } catch(e) {
     btn.textContent='Crear mi cuenta'; btn.disabled=false;
@@ -1063,7 +1063,7 @@ async function doForgot() {
   const email=document.getElementById('forgot-email').value.trim().toLowerCase();
   const msg=document.getElementById('forgot-msg');
   if (!email) { msg.textContent='Ingresá tu email.'; msg.style.color='#F0997B'; msg.style.display='block'; return; }
-  const {error} = await supa.auth.resetPasswordForEmail(email, {redirectTo:window.location.href});
+  const {error} = await supa.auth.resetPasswordForEmail(email, {redirectTo:"https://mangoapp.vercel.app"});
   msg.textContent = error ? error.message : '✓ Enlace enviado. Revisá tu casilla.';
   msg.style.color = error ? '#F0997B' : '#1D9E75';
   msg.style.display='block';
