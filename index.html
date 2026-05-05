@@ -200,6 +200,11 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .login-btn{width:100%;padding:15px 20px;border:none;border-radius:14px;font-size:15px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:12px;}
 .login-step{width:100%;max-width:340px;}
 .login-step.hidden{display:none;}
+
+/* sync indicator */
+.sync-dot{position:fixed;bottom:80px;right:16px;width:10px;height:10px;border-radius:50%;z-index:50;opacity:0;transition:opacity .3s;}
+.sync-dot.ok{background:#1D9E75;opacity:1;}
+.sync-dot.error{background:#F0997B;opacity:1;}
 </style>
 </head>
 <body>
@@ -451,6 +456,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <button onclick="confirmDelete()" style="width:100%;padding:14px;border:none;border-radius:12px;background:transparent;color:#48484A;font-size:13px;font-weight:500;cursor:pointer;">Eliminar cuenta y datos</button>
       <div style="height:16px;"></div>
     </div>
+  <div class="sync-dot" id="sync-dot"></div>
   </div>
 
   <div class="bottom-nav">
@@ -564,12 +570,16 @@ function load(){
   render();
   document.getElementById('mes-btn-label').textContent=mesLbl(selMes);
 }
-function save(){
+async function save(){
+  // Save locally
   try{
     localStorage.setItem(SK, JSON.stringify(S));
     if(currentUser?.id) localStorage.setItem('mango_data_'+currentUser.id, JSON.stringify(S));
   }catch(e){}
-  saveToSupabase();
+  // Save to cloud - don't fire and forget, await it
+  if(currentUser?.id){
+    await saveToSupabase();
+  }
 }
 
 function refreshSelects(){
@@ -1070,7 +1080,12 @@ async function doLogin() {
     }
     err.style.display='block'; return;
   }
-  if (data.user) { setCurrentUser(data.user); onLogin(); loadFromSupabase(); }
+  if (data.user) {
+    setCurrentUser(data.user);
+    onLogin();
+    // Load cloud data immediately after login
+    await loadFromSupabase();
+  }
 }
 
 async function doForgot() {
@@ -1212,53 +1227,61 @@ async function checkSession() {
 
 async function loadFromSupabase() {
   if(!currentUser?.id) return;
-  const uid = currentUser.id;
-  console.log('Loading from Supabase for user:', currentUser.email);
-  try {
-    const { data, error } = await supa.from('user_data').select('data').eq('user_id', uid).single();
-    if (error) {
-      console.error('Supabase load error:', error);
-      return;
+  const { data: sessionData } = await supa.auth.getSession();
+  if(!sessionData?.session) {
+    console.warn('No Supabase session - cannot load from cloud');
+    return;
+  }
+  const { data, error } = await supa.from('user_data').select('data').eq('user_id', currentUser.id).maybeSingle();
+  if (error) {
+    console.error('Cloud load error:', JSON.stringify(error));
+    return;
+  }
+  if (data?.data) {
+    const parsed = JSON.parse(data.data);
+    S.gastos = parsed.gastos || [];
+    S.fijos  = parsed.fijos  || [];
+    S.cuotas = parsed.cuotas || [];
+    if (parsed.cats) {
+      ['daily','cuotas','fijos'].forEach(t => {
+        if (parsed.cats[t]?.length) S.cats[t] = parsed.cats[t];
+      });
     }
-    if (data?.data) {
-      const parsed = JSON.parse(data.data);
-      S.gastos = parsed.gastos || [];
-      S.fijos = parsed.fijos || [];
-      S.cuotas = parsed.cuotas || [];
-      if (parsed.cats) {
-        ['daily','cuotas','fijos'].forEach(t => {
-          if (parsed.cats[t]?.length) S.cats[t] = parsed.cats[t];
-        });
-      }
-      console.log('Loaded from Supabase OK - gastos:', S.gastos.length);
-      refreshSelects(); render();
-    }
-  } catch(e) {
-    console.error('loadFromSupabase exception:', e);
+    // Also save to localStorage as cache
+    try {
+      localStorage.setItem('mango_data_'+currentUser.id, JSON.stringify(S));
+      localStorage.setItem(SK, JSON.stringify(S));
+    } catch(e) {}
+    console.log('Cloud load OK ✓ gastos:', S.gastos.length);
+    refreshSelects(); render();
+  } else {
+    console.log('No cloud data found for this user yet');
   }
 }
 
 async function saveToSupabase() {
   if(!currentUser?.id) return;
+  // Verify we have a valid Supabase session
+  const { data: sessionData } = await supa.auth.getSession();
+  if(!sessionData?.session) {
+    console.warn('No Supabase session - cannot save to cloud');
+    return;
+  }
   const uid = currentUser.id;
-  const email = currentUser.email;
-  console.log('Saving to Supabase for user:', email, uid);
-  try {
-    // Save all data as one JSON blob in a single row — simpler and more reliable
-    const payload = {
-      user_id: uid,
-      email: email,
-      data: JSON.stringify(S),
-      updated_at: new Date().toISOString()
-    };
-    const { error } = await supa.from('user_data').upsert(payload, { onConflict: 'user_id' });
-    if (error) {
-      console.error('Supabase save error:', error);
-    } else {
-      console.log('Saved to Supabase OK');
-    }
-  } catch(e) {
-    console.error('saveToSupabase exception:', e);
+  const payload = {
+    user_id: uid,
+    email: currentUser.email,
+    data: JSON.stringify(S),
+    updated_at: new Date().toISOString()
+  };
+  const { error } = await supa.from('user_data').upsert(payload, { onConflict: 'user_id' });
+  if (error) {
+    console.error('Supabase save error:', JSON.stringify(error));
+    // Show visual indicator that cloud save failed
+    showSyncStatus('error');
+  } else {
+    console.log('Cloud save OK ✓');
+    showSyncStatus('ok');
   }
 }
 
@@ -1277,6 +1300,13 @@ function goScreen(id,btn){
   if(id==='profile')updateProfileScreen();
 }
 
+
+function showSyncStatus(status) {
+  const dot = document.getElementById('sync-dot');
+  if(!dot) return;
+  dot.className = 'sync-dot ' + status;
+  setTimeout(() => { dot.className = 'sync-dot'; }, 2000);
+}
 load();
 </script>
 </body>
