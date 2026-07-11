@@ -346,6 +346,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
             <div class="form-row"><label class="lbl">Monto</label><input type="text" id="d-monto" placeholder="$ 0" oninput="fmtInput(this)" inputmode="numeric"/></div>
             <div class="form-row"><label class="lbl">Categoría</label><select id="d-cat"></select></div>
           </div>
+          <div class="form-row"><label class="lbl">Fecha</label><input type="date" id="d-fecha" style="background:#3A3A3C;color:#F2F2F7;border:1.5px solid #48484A;border-radius:10px;padding:12px;width:100%;font-size:16px;font-family:inherit;-webkit-appearance:none;"/></div>
           <div class="form-row"><label class="lbl">Forma de pago</label>
             <div class="pay-chips" id="dp-chips">
               <button class="pchip active" data-pay="Efectivo" onclick="selPay('d',this)">💵 Efectivo</button>
@@ -661,6 +662,7 @@ function openForm(t){
   document.getElementById('add-home').style.display='none';
   ['daily','cuotas','fijos'].forEach(f=>document.getElementById('form-'+f).style.display='none');
   document.getElementById('form-'+t).style.display='block';
+  if(t==='daily'){const fd=document.getElementById('d-fecha');if(fd&&!fd.value)fd.value=today();}
 }
 function closeForm(){
   ['daily','cuotas','fijos'].forEach(f=>document.getElementById('form-'+f).style.display='none');
@@ -685,9 +687,10 @@ function previewCuota(){
 
 function addDaily(){
   const desc=document.getElementById('d-desc').value.trim(),monto=parseInp('d-monto'),cat=document.getElementById('d-cat').value;
+  const fecha=document.getElementById('d-fecha').value||today();
   if(!desc||isNaN(monto)||monto<=0)return shake('d-desc');
-  S.gastos.push({id:Date.now(),desc,monto,cat,pago:paySel.d,fecha:today()});
-  save();render();closeForm();document.getElementById('d-desc').value='';document.getElementById('d-monto').value='';
+  S.gastos.push({id:Date.now(),desc,monto,cat,pago:paySel.d,fecha});
+  save();render();closeForm();document.getElementById('d-desc').value='';document.getElementById('d-monto').value='';document.getElementById('d-fecha').value='';
 }
 function addCuota(){
   const desc=document.getElementById('c-desc').value.trim(),montoTotal=parseInp('c-monto'),ncuotas=parseInt(document.getElementById('c-ncuotas').value);
