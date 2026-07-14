@@ -800,7 +800,7 @@ function renderSettings(){
       <button class="add-btn ${btnCls}" onclick="addCat()">+ Agregar</button>
     </div>`;
 }
-function renCat(i,val){const n=val.trim();if(!n||S.cats[curStab][i].name===n)return;S.cats[curStab][i].name=n;save();refreshSelects();}
+function renCat(i,val){const n=val.trim();if(!n||S.cats[curStab][i].name===n)return;const old=S.cats[curStab][i].name;S.cats[curStab][i].name=n;if(curStab==='daily')S.gastos.forEach(g=>{if(g.cat===old)g.cat=n;});else S.fijos.forEach(f=>{if(f.cat===old)f.cat=n;});save();refreshSelects();}
 function toggleCP(i){const p=document.getElementById('cp-'+i);if(!p)return;const was=p.classList.contains('open');document.querySelectorAll('.color-panel').forEach(x=>x.classList.remove('open'));if(!was)p.classList.add('open');}
 function setCatCol(i,col,el){S.cats[curStab][i].color=col;const item=document.getElementById('ci-'+i);if(item){item.querySelector('.cat-dot-btn').style.background=col;item.querySelectorAll('.color-panel .sw').forEach(s=>s.classList.toggle('sel',s.style.background===col||s.style.backgroundColor===col));}save();refreshSelects();}
 function pickNew(c,el){newColor=c;document.getElementById('new-prev').style.background=c;document.querySelectorAll('#settings-content .color-pick-row .sw').forEach(s=>s.classList.remove('sel'));el.classList.add('sel');}
