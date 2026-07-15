@@ -343,7 +343,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
           <div class="panel-hd"><div class="pdot pdot-t"></div><span class="panel-title panel-title-t">Gasto diario</span><button class="back-pill" onclick="closeForm()">← volver</button></div>
           <div class="form-row"><label class="lbl">Descripción</label><input type="text" id="d-desc" placeholder="Ej: almuerzo, taxi..."/></div>
           <div class="fgrid">
-            <div class="form-row"><label class="lbl">Monto</label><input type="text" id="d-monto" placeholder="$ 0" oninput="fmtInput(this)" inputmode="numeric"/></div>
+            <div class="form-row"><label class="lbl">Monto</label><input type="text" id="d-monto" placeholder="$ 0" oninput="fmtInput(this)" inputmode="decimal"/></div>
             <div class="form-row"><label class="lbl">Categoría</label><select id="d-cat"></select></div>
           </div>
           <div class="form-row"><label class="lbl">Fecha</label><input type="date" id="d-fecha" style="background:#3A3A3C;color:#F2F2F7;border:1.5px solid #48484A;border-radius:10px;padding:12px;width:100%;font-size:16px;font-family:inherit;-webkit-appearance:none;"/></div>
@@ -363,8 +363,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
           <div class="panel-hd"><div class="pdot pdot-p"></div><span class="panel-title panel-title-p">Nueva cuota</span><button class="back-pill" onclick="closeForm()">← volver</button></div>
           <div class="form-row"><label class="lbl">Descripción</label><input type="text" id="c-desc" placeholder="Ej: remera, heladera..."/></div>
           <div class="fgrid">
-            <div class="form-row"><label class="lbl">Precio total</label><input type="text" id="c-monto" placeholder="$ 0" oninput="fmtInput(this);previewCuota()" inputmode="numeric"/></div>
-            <div class="form-row"><label class="lbl">Cant. cuotas</label><input type="number" id="c-ncuotas" placeholder="3" min="1" max="60" oninput="previewCuota()" inputmode="numeric"/></div>
+            <div class="form-row"><label class="lbl">Precio total</label><input type="text" id="c-monto" placeholder="$ 0" oninput="fmtInput(this);previewCuota()" inputmode="decimal"/></div>
+            <div class="form-row"><label class="lbl">Cant. cuotas</label><input type="number" id="c-ncuotas" placeholder="3" min="1" max="60" oninput="previewCuota()" inputmode="decimal"/></div>
           </div>
           <div class="preview-box" id="c-preview">Ingresá el precio y la cantidad de cuotas.</div>
           <div class="form-row" style="margin-top:10px;"><label class="lbl">Forma de pago</label>
@@ -382,7 +382,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
           <div class="panel-hd"><div class="pdot pdot-a"></div><span class="panel-title panel-title-a">Gasto fijo</span><button class="back-pill" onclick="closeForm()">← volver</button></div>
           <div class="form-row"><label class="lbl">Descripción</label><input type="text" id="f-desc" placeholder="Ej: alquiler, Spotify..."/></div>
           <div class="fgrid">
-            <div class="form-row"><label class="lbl">Monto mensual</label><input type="text" id="f-monto" placeholder="$ 0" oninput="fmtInput(this)" inputmode="numeric"/></div>
+            <div class="form-row"><label class="lbl">Monto mensual</label><input type="text" id="f-monto" placeholder="$ 0" oninput="fmtInput(this)" inputmode="decimal"/></div>
             <div class="form-row"><label class="lbl">Categoría</label><select id="f-cat"></select></div>
           </div>
           <div class="form-row"><label class="lbl">Forma de pago</label>
