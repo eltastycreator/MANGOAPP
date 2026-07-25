@@ -1221,34 +1221,14 @@ async function confirmDelete() {
 }
 
 async function checkSession() {
-  // First: if load() already restored currentUser, show the app immediately
-  if(currentUser) {
-    onLogin();
+  // First: show app immediately if user is cached
+  const savedUser = localStorage.getItem('mango_user');
+  if(savedUser && !currentUser) {
+    try { currentUser = JSON.parse(savedUser); } catch(e) {}
   }
-  // Also restore from localStorage as backup
-  try {
-    const savedUser = localStorage.getItem('mango_user');
-    if(savedUser && !currentUser) {
-      currentUser = JSON.parse(savedUser);
-      onLogin();
-      // Load local data for this user
-      const localData = localStorage.getItem('mango_data_'+currentUser.id);
-      if(localData) {
-        const parsed = JSON.parse(localData);
-        S.gastos = parsed.gastos || S.gastos;
-        S.fijos = parsed.fijos || S.fijos;
-        S.cuotas = parsed.cuotas || S.cuotas;
-        if(parsed.cats) {
-          ['daily','cuotas','fijos'].forEach(t=>{
-            if(parsed.cats[t]?.length) S.cats[t]=parsed.cats[t];
-          });
-        }
-        refreshSelects(); render();
-      }
-    }
-  } catch(e) { console.error('localStorage restore error:', e); }
+  if(currentUser) onLogin();
 
-  // Then: verify/refresh with Supabase in background
+  // Always: verify session and load fresh from Supabase (overrides localStorage)
   supa.auth.onAuthStateChange((event,session)=>{
     if(event==='SIGNED_IN'&&session){
       setCurrentUser(session.user);
@@ -1268,7 +1248,7 @@ async function checkSession() {
       if(!document.getElementById('login-screen').classList.contains('hidden')) {
         onLogin();
       }
-      loadFromSupabase();
+      await loadFromSupabase(); // await so Supabase always wins over localStorage
       return true;
     }
   }catch(e){ console.error('Supabase session error:', e); }
