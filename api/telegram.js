@@ -84,7 +84,8 @@ async function addGasto(user_id, gasto) {
   const rows = await supabase('GET', `/rest/v1/user_data?user_id=eq.${user_id}&select=data`);
   if (!rows || rows.length === 0) return false;
 
-  const userData = rows[0].data || {};
+  let userData = rows[0].data || {};
+  if (typeof userData === 'string') userData = JSON.parse(userData);
   if (!userData.gastos) userData.gastos = [];
 
   const today = new Date().toISOString().split('T')[0];
