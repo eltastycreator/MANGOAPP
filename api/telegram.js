@@ -44,32 +44,39 @@ async function linkUser(chat_id, email) {
   return user;
 }
 
-async function parseGasto(texto) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_KEY,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 200,
-      messages: [{
-        role: 'user',
-        content: `Extraé los datos de este gasto y respondé SOLO con JSON válido, sin texto extra, sin markdown:
-{"desc":"descripción corta","monto":1234.56,"cat":"Categoría","pago":"Efectivo"}
+function parseGasto(texto) {
+  const partes = texto.trim().split(/\s+/);
 
-Categorías posibles: Comida, Transporte, Entretenimiento, Salud, Ropa, Hogar, Educación, Otros
-Formas de pago posibles: Efectivo, Débito, Crédito, Transferencia (si no se menciona, usar Efectivo)
+  // Categorías reconocibles
+  const CATS = ['comida','transporte','entretenimiento','salud','ropa','hogar','educacion','educación','otros'];
+  const PAGOS = ['efectivo','débito','debito','crédito','credito','transferencia'];
+  const PAGOS_MAP = { 'debito':'Débito','débito':'Débito','credito':'Crédito','crédito':'Crédito','transferencia':'Transferencia','efectivo':'Efectivo' };
+  const CATS_MAP = { 'comida':'Comida','transporte':'Transporte','entretenimiento':'Entretenimiento','salud':'Salud','ropa':'Ropa','hogar':'Hogar','educacion':'Educación','educación':'Educación','otros':'Otros' };
 
-Mensaje del usuario: "${texto}"`
-      }]
-    })
-  });
-  const data = await res.json();
-  const raw = data.content?.[0]?.text?.trim();
-  return JSON.parse(raw);
+  let desc = [];
+  let monto = null;
+  let cat = 'Otros';
+  let pago = 'Efectivo';
+
+  for (const p of partes) {
+    const lower = p.toLowerCase();
+    if (!monto && /^[0-9]+([.,][0-9]+)?$/.test(p)) {
+      monto = parseFloat(p.replace(',', '.'));
+    } else if (CATS.includes(lower)) {
+      cat = CATS_MAP[lower];
+    } else if (PAGOS.includes(lower)) {
+      pago = PAGOS_MAP[lower];
+    } else {
+      desc.push(p);
+    }
+  }
+
+  return {
+    desc: desc.join(' ') || 'Gasto',
+    monto: monto || 0,
+    cat,
+    pago
+  };
 }
 
 async function addGasto(user_id, gasto) {
@@ -132,7 +139,7 @@ export default async function handler(req, res) {
 
     // Comando /ayuda
     if (texto.startsWith('/ayuda') || texto.startsWith('/help')) {
-      await sendMessage(chat_id, '📖 *Cómo cargar un gasto:*\n\nMandame un mensaje describiendo el gasto:\n\n• _"almuerzo 1500"_\n• _"taxi 800 transporte"_\n• _"supermercado 12500 crédito"_\n\nYo me encargo del resto 🤖');
+      await sendMessage(chat_id, '📖 *Cómo cargar un gasto:*\n\nMandame el gasto en este formato:\n`descripción monto categoría formadepago`\n\n*Ejemplos:*\n• `almuerzo 1500`\n• `taxi 800 transporte`\n• `supermercado 12500 comida crédito`\n\n*Categorías:* Comida, Transporte, Entretenimiento, Salud, Ropa, Hogar, Educación, Otros\n*Pagos:* Efectivo, Débito, Crédito, Transferencia\n\nSi no ponés categoría o pago, uso *Otros* y *Efectivo* por defecto.');
       return res.status(200).json({ ok: true });
     }
 
