@@ -105,10 +105,11 @@ async function addGasto(user_id, gasto) {
     fecha: today
   });
 
-  await supabase('PATCH', `/rest/v1/user_data?user_id=eq.${user_id}`, {
-    data: userData,
+  const result = await supabase('PATCH', `/rest/v1/user_data?user_id=eq.${user_id}`, {
+    data: JSON.stringify(userData),
     updated_at: new Date().toISOString()
   });
+  if (result?.code) { console.error('PATCH error:', JSON.stringify(result)); return false; }
   return true;
 }
 
