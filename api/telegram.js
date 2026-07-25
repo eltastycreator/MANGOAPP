@@ -84,8 +84,15 @@ async function addGasto(user_id, gasto) {
   const rows = await supabase('GET', `/rest/v1/user_data?user_id=eq.${user_id}&select=data`);
   if (!rows || rows.length === 0) return false;
 
-  let userData = rows[0].data || {};
-  if (typeof userData === 'string') userData = JSON.parse(userData);
+  let raw = rows[0].data || '{}';
+  let userData = {};
+  try {
+    userData = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    // A veces viene doble-escapado
+    if (typeof userData === 'string') userData = JSON.parse(userData);
+  } catch(e) {
+    userData = {};
+  }
   if (!userData.gastos) userData.gastos = [];
 
   const today = new Date().toISOString().split('T')[0];
