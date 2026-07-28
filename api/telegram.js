@@ -21,7 +21,9 @@ async function supabase(method, path, body) {
     },
     body: body ? JSON.stringify(body) : undefined
   });
-  return res.json();
+  const text = await res.text();
+  if (!text || text.trim() === '') return null;
+  try { return JSON.parse(text); } catch(e) { return null; }
 }
 
 async function getLinkedUser(chat_id) {
@@ -84,13 +86,21 @@ async function addGasto(user_id, gasto) {
   const rows = await supabase('GET', `/rest/v1/user_data?user_id=eq.${user_id}&select=data`);
   if (!rows || rows.length === 0) return false;
 
-  let raw = rows[0].data || '{}';
+  let raw = rows[0].data;
   let userData = {};
   try {
-    userData = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    // A veces viene doble-escapado
-    if (typeof userData === 'string') userData = JSON.parse(userData);
+    if (!raw) {
+      userData = {};
+    } else if (typeof raw === 'object') {
+      // Supabase ya lo parseó
+      userData = raw;
+    } else if (typeof raw === 'string' && raw.trim() !== '') {
+      userData = JSON.parse(raw);
+      // doble-escapado
+      if (typeof userData === 'string') userData = JSON.parse(userData);
+    }
   } catch(e) {
+    console.error('parse error:', e.message, 'raw type:', typeof raw, 'raw:', String(raw).slice(0,100));
     userData = {};
   }
   if (!userData.gastos) userData.gastos = [];
