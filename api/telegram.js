@@ -297,6 +297,14 @@ export default async function handler(req, res) {
       resumen += tipoLabel;
 
       await editMessage(chat_id, message_id, resumen);
+      // Mandar botón persistente después de confirmar
+      const bodyBtn = {
+        chat_id, text: '¿Querés cargar otro gasto? 👇',
+        parse_mode: 'Markdown', reply_markup: persistentKeyboard()
+      };
+      await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyBtn)
+      });
     }
 
     return res.status(200).json({ ok: true });
