@@ -443,6 +443,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <div id="ls-fijos-list"><p class="empty">Sin gastos fijos</p></div>
       <div class="section-title">Cuotas de este mes</div>
       <div id="ls-cuotas-list"><p class="empty">Sin cuotas este mes</p></div>
+      <div class="section-title" style="color:#4ade80;">💰 Ingresos</div>
+      <div id="ls-ingresos-list"><p class="empty">Sin ingresos este mes</p></div>
     </div>
 
     <div class="screen" id="sc-summary">
@@ -756,6 +758,10 @@ function bCat(type,cat){const color=getCatColor(type,cat);return `<span class="b
 function bPago(p){const m={'Efectivo':'bpago-ef','Débito':'bpago-db','Crédito':'bpago-cr','Transferencia':'bpago-tr'};return `<span class="badge ${m[p]||''}">${p}</span>`;}
 function iGasto(g,d){return `<div class="item" style="cursor:pointer;" onclick="openEdit('gastos',${g.id})"><div style="flex:1"><div class="item-name">${g.desc}</div><div class="item-meta">${bCat('daily',g.cat)}${bPago(g.pago)}<span class="item-date">${fmtDate(g.fecha)}</span></div></div><div class="item-right"><span class="item-amount">${fmt(g.monto)}</span>${d?`<button class="del" onclick="event.stopPropagation();del('gastos',${g.id})">×</button>`:''}</div></div>`;}
 function iFijo(f,d){return `<div class="item" style="cursor:pointer;" onclick="openEdit('fijos',${f.id})"><div style="flex:1"><div class="item-name">${f.desc}</div><div class="item-meta">${bCat('fijos',f.cat)}${bPago(f.pago)}</div></div><div class="item-right"><span class="item-amount">${fmt(f.monto)}</span>${d?`<button class="del" onclick="event.stopPropagation();del('fijos',${f.id})">×</button>`:''}</div></div>`;}
+function iIngreso(i,d){
+  const tipoLabel=i.tipo==='fijo'?'Fijo mensual':'Eventual';
+  return `<div class="item" style="cursor:pointer;border-left:3px solid #1D9E75;" onclick="openEdit('ingresos',${i.id})"><div style="flex:1"><div class="item-name">${i.desc}</div><div class="item-meta"><span class="badge" style="background:#0d3320;color:#4ade80;">${tipoLabel}</span>${bPago(i.pago)}<span class="item-date">${fmtDate(i.fecha)}</span></div></div><div class="item-right"><span class="item-amount" style="color:#4ade80;">${fmt(i.monto)}</span>${d?`<button class="del" onclick="event.stopPropagation();del('ingresos',${i.id})">×</button>`:''}</div></div>`;
+}
 function iCuota(c,d){return `<div class="item" style="cursor:pointer;" onclick="openEdit('cuotas',${c.id})"><div style="flex:1"><div class="item-name">${c.desc}</div><div class="item-meta"><span class="badge bp">Cuota ${c.nroCuota}/${c.ncuotas}</span>${bPago(c.pago)}<span class="item-date">desde ${mesLbl(c.mesInicio)}</span></div></div><div class="item-right"><div><div class="item-amount">${fmt(c.montoCuota)}</div><div class="item-amount-sub">Total ${fmt(c.montoTotal)}</div></div>${d?`<button class="del" onclick="event.stopPropagation();del('cuotas',${c.id})">×</button>`:''}</div></div>`;}
 
 function render(){
@@ -774,6 +780,9 @@ function renderList(){
   document.getElementById('ls-var').textContent=fmt(sv);document.getElementById('ls-fix').textContent=fmt(sf);document.getElementById('ls-cuo').textContent=fmt(sc);
   document.getElementById('ls-gastos-list').innerHTML=gm.length?gm.slice().reverse().map(g=>iGasto(g,true)).join(''):'<p class="empty">Sin gastos este mes</p>';
   document.getElementById('ls-fijos-list').innerHTML=S.fijos.length?S.fijos.map(f=>iFijo(f,true)).join(''):'<p class="empty">Sin gastos fijos</p>';
+  const mesIng=mkMes();
+  const im=S.ingresos.filter(i=>i.tipo==='fijo'||i.fecha.startsWith(mesIng));
+  document.getElementById('ls-ingresos-list').innerHTML=im.length?im.slice().reverse().map(i=>iIngreso(i,true)).join(''):'<p class="empty">Sin ingresos este mes</p>';
   document.getElementById('ls-cuotas-list').innerHTML=cm.length?cm.map(c=>iCuota(c,true)).join(''):'<p class="empty">Sin cuotas este mes</p>';
 }
 function buildMesDD(){
@@ -1477,6 +1486,36 @@ function openEdit(tipo,id){
       </div>
       <button onclick="saveEdit()" style="width:100%;padding:14px;background:#7F77DD;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:8px;">Guardar cambios</button>`;
   }
+  } else if(tipo==='ingresos'){
+    const i=S.ingresos.find(x=>x.id===id); if(!i)return;
+    editPaySel=i.pago; title.textContent='Editar ingreso';
+    body.innerHTML=`
+      <div class="form-row"><label class="lbl">Descripción</label>
+        <input type="text" id="edit-desc" value="${i.desc}" style="background:#3A3A3C;"/>
+      </div>
+      <div class="fgrid">
+        <div class="form-row"><label class="lbl">Monto</label>
+          <input type="text" id="edit-monto" value="${fmt(i.monto)}" oninput="fmtInput(this)" style="background:#3A3A3C;"/>
+        </div>
+        <div class="form-row"><label class="lbl">Tipo</label>
+          <select id="edit-tipo-ing" style="background:#3A3A3C;color:#F2F2F7;border:1.5px solid #48484A;border-radius:10px;padding:12px;width:100%;font-size:15px;">
+            <option value="fijo" ${i.tipo==='fijo'?'selected':''}>Fijo mensual</option>
+            <option value="eventual" ${i.tipo==='eventual'?'selected':''}>Eventual</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row"><label class="lbl">Fecha</label>
+        <input type="date" id="edit-fecha" value="${i.fecha||''}" style="background:#3A3A3C;width:100%;padding:12px;border:1.5px solid #48484A;border-radius:10px;color:#F2F2F7;font-size:16px;font-family:inherit;-webkit-appearance:none;"/>
+      </div>
+      <div class="form-row"><label class="lbl">Forma de cobro</label>
+        <div class="pay-chips" id="edit-pay-chips">
+          <button class="pchip ${i.pago==='Transferencia'?'active':''}" data-pay="Transferencia" onclick="selEditPay(this)">📲 Transferencia</button>
+          <button class="pchip ${i.pago==='Efectivo'?'active':''}" data-pay="Efectivo" onclick="selEditPay(this)">💵 Efectivo</button>
+          <button class="pchip ${i.pago==='Débito'?'active':''}" data-pay="Débito" onclick="selEditPay(this)">💳 Débito</button>
+        </div>
+      </div>
+      <button onclick="saveEdit()" style="width:100%;padding:14px;background:#1D9E75;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:8px;">Guardar cambios</button>`;
+  }
   document.getElementById('edit-modal').classList.add('open');
 }
 
@@ -1509,6 +1548,15 @@ function saveEdit(){
     const ncuotas=parseInt(document.getElementById('edit-ncuotas').value);
     if(!desc||isNaN(montoTotal)||!ncuotas)return;
     c.desc=desc; c.montoTotal=montoTotal; c.montoCuota=Math.ceil(montoTotal/ncuotas); c.ncuotas=ncuotas; c.pago=editPaySel;
+  }
+  } else if(editTipo==='ingresos'){
+    const i=S.ingresos.find(x=>x.id===editId); if(!i)return;
+    const desc=document.getElementById('edit-desc').value.trim();
+    const monto=parseInp('edit-monto');
+    const tipo=document.getElementById('edit-tipo-ing').value;
+    const fecha=document.getElementById('edit-fecha').value;
+    if(!desc||isNaN(monto)||monto<=0)return;
+    i.desc=desc; i.monto=monto; i.tipo=tipo; i.pago=editPaySel; if(fecha)i.fecha=fecha;
   }
   save();
   closeEdit();
