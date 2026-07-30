@@ -1,17 +1,11 @@
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
+const SUPABASE_URL = 'https://arimnsdiwwgkvfwmoevw.supabase.co';
 
-async function sendMessage(chat_id, text) {
-  await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id, text, parse_mode: 'Markdown' })
-  });
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function supabase(method, path, body) {
-  const res = await fetch(`https://arimnsdiwwgkvfwmoevw.supabase.co${path}`, {
+async function supa(method, path, body) {
+  const res = await fetch(`${SUPABASE_URL}${path}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
@@ -26,107 +20,281 @@ async function supabase(method, path, body) {
   try { return JSON.parse(text); } catch(e) { return null; }
 }
 
+async function sendMessage(chat_id, text, reply_markup) {
+  const body = { chat_id, text, parse_mode: 'Markdown' };
+  if (reply_markup) body.reply_markup = reply_markup;
+  await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
+async function editMessage(chat_id, message_id, text, reply_markup) {
+  const body = { chat_id, message_id, text, parse_mode: 'Markdown' };
+  if (reply_markup) body.reply_markup = reply_markup;
+  await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/editMessageText`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
+async function answerCallback(callback_query_id) {
+  await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/answerCallbackQuery`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ callback_query_id })
+  });
+}
+
+// ── Supabase helpers ──────────────────────────────────────────────────────────
+
 async function getLinkedUser(chat_id) {
-  const data = await supabase('GET', `/rest/v1/telegram_users?chat_id=eq.${chat_id}&select=*`);
+  const data = await supa('GET', `/rest/v1/telegram_users?chat_id=eq.${chat_id}&select=*`);
   return data?.[0] || null;
 }
 
-async function linkUser(chat_id, email) {
-  // Buscar el user por email en user_data
-  const users = await supabase('GET', `/rest/v1/user_data?email=eq.${email}&select=user_id,email`);
-  if (!users || users.length === 0) return null;
-  const user = users[0];
-
-  // Vincular chat_id con user_id
-  await supabase('POST', `/rest/v1/telegram_users`, {
-    chat_id: String(chat_id),
-    user_id: user.user_id,
-    email: user.email
-  });
-  return user;
-}
-
-function parseGasto(texto) {
-  const partes = texto.trim().split(/\s+/);
-
-  // Categorías reconocibles
-  const CATS = ['comida','transporte','entretenimiento','salud','ropa','hogar','educacion','educación','otros'];
-  const PAGOS = ['efectivo','débito','debito','crédito','credito','transferencia'];
-  const PAGOS_MAP = { 'debito':'Débito','débito':'Débito','credito':'Crédito','crédito':'Crédito','transferencia':'Transferencia','efectivo':'Efectivo' };
-  const CATS_MAP = { 'comida':'Comida','transporte':'Transporte','entretenimiento':'Entretenimiento','salud':'Salud','ropa':'Ropa','hogar':'Hogar','educacion':'Educación','educación':'Educación','otros':'Otros' };
-
-  let desc = [];
-  let monto = null;
-  let cat = 'Otros';
-  let pago = 'Efectivo';
-
-  for (const p of partes) {
-    const lower = p.toLowerCase();
-    if (!monto && /^[0-9]+([.,][0-9]+)?$/.test(p)) {
-      monto = parseFloat(p.replace(',', '.'));
-    } else if (CATS.includes(lower)) {
-      cat = CATS_MAP[lower];
-    } else if (PAGOS.includes(lower)) {
-      pago = PAGOS_MAP[lower];
-    } else {
-      desc.push(p);
-    }
-  }
-
-  return {
-    desc: desc.join(' ') || 'Gasto',
-    monto: monto || 0,
-    cat,
-    pago
-  };
-}
-
-async function addGasto(user_id, gasto) {
-  // Traer data actual del usuario
-  const rows = await supabase('GET', `/rest/v1/user_data?user_id=eq.${user_id}&select=data`);
-  if (!rows || rows.length === 0) return false;
-
+async function getUserData(user_id) {
+  const rows = await supa('GET', `/rest/v1/user_data?user_id=eq.${user_id}&select=data`);
+  if (!rows || rows.length === 0) return null;
   let raw = rows[0].data;
-  let userData = {};
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
   try {
-    if (!raw) {
-      userData = {};
-    } else if (typeof raw === 'object') {
-      // Supabase ya lo parseó
-      userData = raw;
-    } else if (typeof raw === 'string' && raw.trim() !== '') {
-      userData = JSON.parse(raw);
-      // doble-escapado
-      if (typeof userData === 'string') userData = JSON.parse(userData);
-    }
-  } catch(e) {
-    console.error('parse error:', e.message, 'raw type:', typeof raw, 'raw:', String(raw).slice(0,100));
-    userData = {};
-  }
-  if (!userData.gastos) userData.gastos = [];
+    let parsed = JSON.parse(raw);
+    if (typeof parsed === 'string') parsed = JSON.parse(parsed);
+    return parsed;
+  } catch(e) { return {}; }
+}
 
-  const today = new Date().toISOString().split('T')[0];
-  userData.gastos.push({
-    id: Date.now(),
-    desc: gasto.desc,
-    monto: gasto.monto,
-    cat: gasto.cat,
-    pago: gasto.pago || 'Efectivo',
-    fecha: today
-  });
-
-  const result = await supabase('PATCH', `/rest/v1/user_data?user_id=eq.${user_id}`, {
+async function saveUserData(user_id, userData) {
+  await supa('PATCH', `/rest/v1/user_data?user_id=eq.${user_id}`, {
     data: JSON.stringify(userData),
     updated_at: new Date().toISOString()
   });
-  if (result?.code) { console.error('PATCH error:', JSON.stringify(result)); return false; }
-  return true;
 }
+
+async function getSession(chat_id) {
+  const rows = await supa('GET', `/rest/v1/telegram_sessions?chat_id=eq.${chat_id}&select=*`);
+  return rows?.[0] || { chat_id, state: 'idle', data: {} };
+}
+
+async function saveSession(chat_id, state, data = {}) {
+  const existing = await supa('GET', `/rest/v1/telegram_sessions?chat_id=eq.${chat_id}&select=chat_id`);
+  if (existing && existing.length > 0) {
+    await supa('PATCH', `/rest/v1/telegram_sessions?chat_id=eq.${chat_id}`, {
+      state, data, updated_at: new Date().toISOString()
+    });
+  } else {
+    await supa('POST', `/rest/v1/telegram_sessions`, {
+      chat_id: String(chat_id), state, data, updated_at: new Date().toISOString()
+    });
+  }
+}
+
+async function clearSession(chat_id) {
+  await saveSession(String(chat_id), 'idle', {});
+}
+
+// ── Botones ───────────────────────────────────────────────────────────────────
+
+function tipoButtons() {
+  return {
+    inline_keyboard: [[
+      { text: '📅 Diario', callback_data: 'tipo:diario' },
+      { text: '💳 Cuota', callback_data: 'tipo:cuota' },
+      { text: '📌 Fijo', callback_data: 'tipo:fijo' }
+    ]]
+  };
+}
+
+function catButtons(cats) {
+  const rows = [];
+  for (let i = 0; i < cats.length; i += 2) {
+    const row = [{ text: cats[i].name, callback_data: `cat:${cats[i].name}` }];
+    if (cats[i+1]) row.push({ text: cats[i+1].name, callback_data: `cat:${cats[i+1].name}` });
+    rows.push(row);
+  }
+  rows.push([{ text: '❌ Cancelar', callback_data: 'cancel' }]);
+  return { inline_keyboard: rows };
+}
+
+function pagoButtons() {
+  return {
+    inline_keyboard: [
+      [
+        { text: '💵 Efectivo', callback_data: 'pago:Efectivo' },
+        { text: '💳 Débito', callback_data: 'pago:Débito' }
+      ],
+      [
+        { text: '💳 Crédito', callback_data: 'pago:Crédito' },
+        { text: '📲 Transferencia', callback_data: 'pago:Transferencia' }
+      ],
+      [{ text: '❌ Cancelar', callback_data: 'cancel' }]
+    ]
+  };
+}
+
+function cuotasButtons() {
+  return {
+    inline_keyboard: [
+      [
+        { text: '2', callback_data: 'cuotas:2' },
+        { text: '3', callback_data: 'cuotas:3' },
+        { text: '4', callback_data: 'cuotas:4' },
+        { text: '6', callback_data: 'cuotas:6' }
+      ],
+      [
+        { text: '9', callback_data: 'cuotas:9' },
+        { text: '12', callback_data: 'cuotas:12' },
+        { text: '18', callback_data: 'cuotas:18' },
+        { text: '24', callback_data: 'cuotas:24' }
+      ],
+      [{ text: '❌ Cancelar', callback_data: 'cancel' }]
+    ]
+  };
+}
+
+// ── Guardar gasto ─────────────────────────────────────────────────────────────
+
+async function guardarGasto(user_id, sessionData) {
+  const { tipo, desc, monto, cat, pago, ncuotas } = sessionData;
+  const userData = await getUserData(user_id);
+  const today = new Date().toISOString().split('T')[0];
+  const mesActual = today.slice(0, 7);
+
+  if (tipo === 'diario') {
+    if (!userData.gastos) userData.gastos = [];
+    userData.gastos.push({
+      id: Date.now(), desc, monto: parseFloat(monto), cat, pago, fecha: today
+    });
+  } else if (tipo === 'fijo') {
+    if (!userData.fijos) userData.fijos = [];
+    userData.fijos.push({
+      id: Date.now(), desc, monto: parseFloat(monto), cat, pago
+    });
+  } else if (tipo === 'cuota') {
+    if (!userData.cuotas) userData.cuotas = [];
+    userData.cuotas.push({
+      id: Date.now(), desc,
+      montoTotal: parseFloat(monto),
+      montoCuota: parseFloat((monto / ncuotas).toFixed(2)),
+      ncuotas: parseInt(ncuotas),
+      pago, mesInicio: mesActual
+    });
+  }
+
+  await saveUserData(user_id, userData);
+}
+
+function fmt(n) {
+  return '$ ' + parseFloat(n).toLocaleString('es-AR');
+}
+
+function parseMonto(texto) {
+  const partes = texto.trim().split(/\s+/);
+  let monto = null;
+  let descPartes = [];
+  for (const p of partes) {
+    if (!monto && /^[0-9]+([.,][0-9]+)?$/.test(p)) {
+      monto = parseFloat(p.replace(',', '.'));
+    } else {
+      descPartes.push(p);
+    }
+  }
+  return { desc: descPartes.join(' ') || 'Gasto', monto };
+}
+
+// ── Handler principal ─────────────────────────────────────────────────────────
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(200).json({ ok: true });
 
-  const { message } = req.body;
+  const { message, callback_query } = req.body;
+
+  // ── Callback de botones ──
+  if (callback_query) {
+    const chat_id = callback_query.message.chat.id;
+    const message_id = callback_query.message.message_id;
+    const cbData = callback_query.data;
+    await answerCallback(callback_query.id);
+
+    if (cbData === 'cancel') {
+      await clearSession(String(chat_id));
+      await editMessage(chat_id, message_id, '❌ Carga cancelada.');
+      return res.status(200).json({ ok: true });
+    }
+
+    const linked = await getLinkedUser(String(chat_id));
+    if (!linked) {
+      await sendMessage(chat_id, '⚠️ Primero vinculá tu cuenta con `/email tucorreo@gmail.com`');
+      return res.status(200).json({ ok: true });
+    }
+
+    const session = await getSession(String(chat_id));
+    const [action, value] = cbData.split(':');
+
+    // Eligió tipo → pedir descripción y monto
+    if (action === 'tipo') {
+      await saveSession(String(chat_id), 'esperando_desc', { tipo: value });
+      const tipoLabel = value === 'diario' ? 'Diario' : value === 'cuota' ? 'Cuota' : 'Fijo';
+      await editMessage(chat_id, message_id,
+        `📌 Tipo: *${tipoLabel}*\n\nAhora escribí la descripción y el monto:\n_Ej: almuerzo 1500_`
+      );
+    }
+
+    // Eligió categoría
+    else if (action === 'cat') {
+      const tipo = session.data.tipo;
+      if (tipo === 'cuota') {
+        await saveSession(String(chat_id), 'esperando_cuotas', { ...session.data, cat: value });
+        await editMessage(chat_id, message_id,
+          `📝 *${session.data.desc}* — ${fmt(session.data.monto)}\n🏷️ ${value}\n\n¿En cuántas cuotas?`,
+          cuotasButtons()
+        );
+      } else {
+        await saveSession(String(chat_id), 'esperando_pago', { ...session.data, cat: value });
+        await editMessage(chat_id, message_id,
+          `📝 *${session.data.desc}* — ${fmt(session.data.monto)}\n🏷️ ${value}\n\n¿Forma de pago?`,
+          pagoButtons()
+        );
+      }
+    }
+
+    // Eligió cuotas
+    else if (action === 'cuotas') {
+      await saveSession(String(chat_id), 'esperando_pago', { ...session.data, ncuotas: parseInt(value) });
+      await editMessage(chat_id, message_id,
+        `📝 *${session.data.desc}* — ${fmt(session.data.monto)}\n🏷️ ${session.data.cat} — ${value} cuotas\n\n¿Forma de pago?`,
+        pagoButtons()
+      );
+    }
+
+    // Eligió pago → guardar
+    else if (action === 'pago') {
+      const finalData = { ...session.data, pago: value };
+      await clearSession(String(chat_id));
+      await guardarGasto(linked.user_id, finalData);
+
+      let resumen = `✅ *Gasto cargado!*\n\n`;
+      resumen += `📝 ${finalData.desc}\n`;
+      resumen += `💰 ${fmt(finalData.monto)}\n`;
+      resumen += `🏷️ ${finalData.cat}\n`;
+      resumen += `💳 ${value}\n`;
+      if (finalData.tipo === 'cuota') {
+        resumen += `🔢 ${finalData.ncuotas} cuotas de ${fmt(finalData.monto / finalData.ncuotas)}\n`;
+      }
+      const tipoLabel = finalData.tipo === 'diario' ? '📅 Diario' : finalData.tipo === 'cuota' ? '💳 Cuota' : '📌 Fijo';
+      resumen += tipoLabel;
+
+      await editMessage(chat_id, message_id, resumen);
+    }
+
+    return res.status(200).json({ ok: true });
+  }
+
+  // ── Mensaje de texto ──
   if (!message) return res.status(200).json({ ok: true });
 
   const chat_id = message.chat.id;
@@ -134,55 +302,80 @@ export default async function handler(req, res) {
   if (!texto) return res.status(200).json({ ok: true });
 
   try {
-    // Comando /start o /vincular
-    if (texto.startsWith('/start') || texto.startsWith('/vincular')) {
-      await sendMessage(chat_id, '👋 Hola! Soy el bot de *Mango*.\n\nPara vincular tu cuenta mandame tu email:\n`/email tucorreo@gmail.com`');
+    // /start
+    if (texto.startsWith('/start')) {
+      await sendMessage(chat_id, '👋 Hola! Soy el bot de *Mango* 🥭\n\nPara vincular tu cuenta:\n`/email tucorreo@gmail.com`');
       return res.status(200).json({ ok: true });
     }
 
-    // Comando /email para vincular cuenta
+    // /email
     if (texto.startsWith('/email')) {
       const email = texto.split(' ')[1]?.toLowerCase().trim();
       if (!email) {
         await sendMessage(chat_id, '⚠️ Formato: `/email tucorreo@gmail.com`');
         return res.status(200).json({ ok: true });
       }
-      const user = await linkUser(chat_id, email);
-      if (!user) {
-        await sendMessage(chat_id, '❌ No encontré ninguna cuenta con ese email. Verificá que sea el mismo con el que te registraste en Mango.');
-      } else {
-        await sendMessage(chat_id, `✅ Cuenta vinculada! Hola *${email}* 🎉\n\nAhora podés cargar gastos así:\n_"almuerzo 1500"_\n_"taxi 800 transporte débito"_`);
+      const users = await supa('GET', `/rest/v1/user_data?email=eq.${email}&select=user_id,email`);
+      if (!users || users.length === 0) {
+        await sendMessage(chat_id, '❌ No encontré ninguna cuenta con ese email.');
+        return res.status(200).json({ ok: true });
       }
+      const existing = await supa('GET', `/rest/v1/telegram_users?chat_id=eq.${chat_id}&select=chat_id`);
+      if (existing && existing.length > 0) {
+        await supa('PATCH', `/rest/v1/telegram_users?chat_id=eq.${chat_id}`, { user_id: users[0].user_id, email });
+      } else {
+        await supa('POST', `/rest/v1/telegram_users`, { chat_id: String(chat_id), user_id: users[0].user_id, email });
+      }
+      await sendMessage(chat_id, `✅ Cuenta vinculada! Hola *${email}* 🎉\n\nMandame /nuevo para cargar tu primer gasto.`);
       return res.status(200).json({ ok: true });
     }
 
-    // Comando /ayuda
+    // /ayuda
     if (texto.startsWith('/ayuda') || texto.startsWith('/help')) {
-      await sendMessage(chat_id, '📖 *Cómo cargar un gasto:*\n\nMandame el gasto en este formato:\n`descripción monto categoría formadepago`\n\n*Ejemplos:*\n• `almuerzo 1500`\n• `taxi 800 transporte`\n• `supermercado 12500 comida crédito`\n\n*Categorías:* Comida, Transporte, Entretenimiento, Salud, Ropa, Hogar, Educación, Otros\n*Pagos:* Efectivo, Débito, Crédito, Transferencia\n\nSi no ponés categoría o pago, uso *Otros* y *Efectivo* por defecto.');
+      await sendMessage(chat_id, '📖 *Cómo cargar un gasto:*\n\nMandame `/nuevo` y seguí los pasos:\n1. Elegís el tipo (Diario, Cuota o Fijo)\n2. Escribís la descripción y monto\n3. Elegís la categoría\n4. Elegís la forma de pago\n\n✅ Listo!');
       return res.status(200).json({ ok: true });
     }
 
-    // Verificar si el usuario está vinculado
-    const linked = await getLinkedUser(chat_id);
+    // Verificar vinculación
+    const linked = await getLinkedUser(String(chat_id));
     if (!linked) {
-      await sendMessage(chat_id, '⚠️ Primero tenés que vincular tu cuenta.\n\nMandame: `/email tucorreo@gmail.com`');
+      await sendMessage(chat_id, '⚠️ Primero vinculá tu cuenta con:\n`/email tucorreo@gmail.com`');
       return res.status(200).json({ ok: true });
     }
 
-    // Parsear el gasto con IA
-    const gasto = await parseGasto(texto);
-    const ok = await addGasto(linked.user_id, gasto);
+    const session = await getSession(String(chat_id));
 
-    if (ok) {
-      const fmt = (n) => '$ ' + n.toLocaleString('es-AR');
-      await sendMessage(chat_id, `✅ *Gasto cargado!*\n\n📝 ${gasto.desc}\n💰 ${fmt(gasto.monto)}\n🏷️ ${gasto.cat}\n💳 ${gasto.pago}`);
-    } else {
-      await sendMessage(chat_id, '❌ Hubo un error al guardar el gasto. Intentá de nuevo.');
+    // Esperando descripción y monto
+    if (session.state === 'esperando_desc') {
+      const { desc, monto } = parseMonto(texto);
+      if (!monto || monto <= 0) {
+        await sendMessage(chat_id, '⚠️ No encontré el monto. Escribí así:\n`almuerzo 1500`');
+        return res.status(200).json({ ok: true });
+      }
+
+      const userData = await getUserData(linked.user_id);
+      const tipo = session.data.tipo;
+      const catKey = tipo === 'diario' ? 'daily' : tipo === 'fijo' ? 'fijos' : 'cuotas';
+      const cats = userData?.cats?.[catKey] || [];
+
+      await saveSession(String(chat_id), 'esperando_cat', { ...session.data, desc, monto });
+      await sendMessage(chat_id,
+        `📝 *${desc}* — ${fmt(monto)}\n\n¿Qué categoría?`,
+        catButtons(cats)
+      );
+      return res.status(200).json({ ok: true });
     }
 
-  } catch (err) {
-    console.error(err);
-    await sendMessage(chat_id, '❌ No pude entender el gasto. Intentá con algo como: _"almuerzo 1500"_');
+    // Cualquier otro mensaje → mostrar menú de tipo
+    await saveSession(String(chat_id), 'esperando_tipo', {});
+    await sendMessage(chat_id,
+      '¿Qué tipo de gasto querés cargar?',
+      tipoButtons()
+    );
+
+  } catch(err) {
+    console.error('handler error:', err.message);
+    await sendMessage(chat_id, '❌ Algo salió mal. Intentá de nuevo con /nuevo');
   }
 
   return res.status(200).json({ ok: true });
