@@ -696,7 +696,7 @@ function openForm(t){
   if(t==='ingresos'){const fi=document.getElementById('i-fecha');if(fi)fi.value=today();}
 }
 function closeForm(){
-  ['daily','cuotas','fijos'].forEach(f=>document.getElementById('form-'+f).style.display='none');
+  ['daily','cuotas','fijos','ingresos'].forEach(f=>document.getElementById('form-'+f).style.display='none');
   document.getElementById('add-home').style.display='block';
 }
 
