@@ -48,6 +48,14 @@ async function answerCallback(callback_query_id) {
   });
 }
 
+function persistentKeyboard() {
+  return {
+    keyboard: [[{ text: '➕ Nuevo gasto' }]],
+    resize_keyboard: true,
+    persistent: true
+  };
+}
+
 // ── Supabase helpers ──────────────────────────────────────────────────────────
 
 async function getLinkedUser(chat_id) {
@@ -304,7 +312,14 @@ export default async function handler(req, res) {
   try {
     // /start
     if (texto.startsWith('/start')) {
-      await sendMessage(chat_id, '👋 Hola! Soy el bot de *Mango* 🥭\n\nPara vincular tu cuenta:\n`/email tucorreo@gmail.com`');
+      const body = {
+        chat_id, text: '👋 Hola! Soy el bot de *Mango* 🥭\n\nPara vincular tu cuenta:\n`/email tucorreo@gmail.com`',
+        parse_mode: 'Markdown',
+        reply_markup: persistentKeyboard()
+      };
+      await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+      });
       return res.status(200).json({ ok: true });
     }
 
@@ -326,7 +341,13 @@ export default async function handler(req, res) {
       } else {
         await supa('POST', `/rest/v1/telegram_users`, { chat_id: String(chat_id), user_id: users[0].user_id, email });
       }
-      await sendMessage(chat_id, `✅ Cuenta vinculada! Hola *${email}* 🎉\n\nMandame /nuevo para cargar tu primer gasto.`);
+      const bodyVinc = {
+        chat_id, text: `✅ Cuenta vinculada! Hola *${email}* 🎉\n\nApretá el botón de abajo para cargar tu primer gasto 👇`,
+        parse_mode: 'Markdown', reply_markup: persistentKeyboard()
+      };
+      await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyVinc)
+      });
       return res.status(200).json({ ok: true });
     }
 
@@ -366,12 +387,9 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // Cualquier otro mensaje → mostrar menú de tipo
+    // Botón "➕ Nuevo gasto" o cualquier otro mensaje → mostrar menú de tipo
     await saveSession(String(chat_id), 'esperando_tipo', {});
-    await sendMessage(chat_id,
-      '¿Qué tipo de gasto querés cargar?',
-      tipoButtons()
-    );
+    await sendMessage(chat_id, '¿Qué tipo de gasto querés cargar?', tipoButtons());
 
   } catch(err) {
     console.error('handler error:', err.message);
