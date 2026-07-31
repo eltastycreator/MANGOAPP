@@ -1379,20 +1379,7 @@ async function saveToSupabase() {
   }
 }
 
-// goScreen actualizado para perfil
-function goScreen(id,btn){
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  document.querySelectorAll('.bn-item').forEach(b=>b.classList.remove('active'));
-  document.getElementById('sc-'+id).classList.add('active');
-  if(btn)btn.classList.add('active');
-  const titles={add:'Agregar gasto',list:'Mis gastos',summary:'Resumen',profile:'Mi perfil'};
-  const subs={add:'¿En qué gastaste hoy?',list:mesLbl(mkMes()),summary:'Historial por mes',profile:currentUser?currentUser.email:'—'};
-  document.getElementById('hdr-title').textContent=titles[id]||'';
-  document.getElementById('hdr-sub').textContent=subs[id]||'';
-  if(id==='list')renderList();
-  if(id==='summary'){buildMesDD();renderSummary();}
-  if(id==='profile')updateProfileScreen();
-}
+
 
 
 function showSyncStatus(status) {
@@ -1485,7 +1472,6 @@ function openEdit(tipo,id){
         </div>
       </div>
       <button onclick="saveEdit()" style="width:100%;padding:14px;background:#7F77DD;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;margin-top:8px;">Guardar cambios</button>`;
-  }
   } else if(tipo==='ingresos'){
     const i=S.ingresos.find(x=>x.id===id); if(!i)return;
     editPaySel=i.pago; title.textContent='Editar ingreso';
@@ -1548,7 +1534,6 @@ function saveEdit(){
     const ncuotas=parseInt(document.getElementById('edit-ncuotas').value);
     if(!desc||isNaN(montoTotal)||!ncuotas)return;
     c.desc=desc; c.montoTotal=montoTotal; c.montoCuota=Math.ceil(montoTotal/ncuotas); c.ncuotas=ncuotas; c.pago=editPaySel;
-  }
   } else if(editTipo==='ingresos'){
     const i=S.ingresos.find(x=>x.id===editId); if(!i)return;
     const desc=document.getElementById('edit-desc').value.trim();
